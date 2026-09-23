@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crystal-lang/install-crystal@v1
+      - name: Install dependencies
+        run: shards install
+      - name: Build
+        run: shards build --release
+      - name: Smoke test
+        run: |
+          out=$(printf '{"users": [{"name": "Alice"}, {"name": "Bob"}]}' | bin/c0fmt import | bin/c0fmt pretty)
+          echo "$out"
+          echo "$out" | grep -q 'Alice'
+          printf 'name,amount\nAlice,100\n' | bin/c0fmt import csv | bin/c0fmt export json | grep -q '"amount": "100"'
+          printf 'name,amount\nAlice,100\n' | bin/c0fmt import csv | bin/c0fmt validate

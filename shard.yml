@@ -1,0 +1,22 @@
+name: c0-fmt
+version: 0.1.0
+description: c0fmt — command-line tool for C0DATA (import/export CSV, JSON, YAML; pretty and compact forms; validation)
+
+authors:
+  - Thomas Sawyer <transfire@gmail.com>
+
+crystal: '>= 1.19.1'
+
+license: MIT
+
+dependencies:
+  c0:
+    github: c0data/c0-cr
+    version: ~> 0.11.0
+  jargon:
+    github: trans/jargon
+    version: ">= 0.20.1"
+
+targets:
+  c0fmt:
+    main: src/c0fmt.cr

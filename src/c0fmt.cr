@@ -1,8 +1,8 @@
 # TODO: Add shell completion generation (Jargon supports bash/zsh/fish via --completions)
 require "jargon"
-require "./c0"
-require "./c0/csv"
-require "./c0/json"
+require "c0"
+require "c0/csv"
+require "c0/json"
 
 SCHEMA = <<-YAML
 ---
