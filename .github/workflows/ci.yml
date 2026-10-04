@@ -25,3 +25,10 @@ jobs:
           echo "$out" | grep -q 'Alice'
           printf 'name,amount\nAlice,100\n' | bin/c0fmt import csv | bin/c0fmt export json | grep -q '"amount": "100"'
           printf 'name,amount\nAlice,100\n' | bin/c0fmt import csv | bin/c0fmt validate
+      - name: Completion smoke test
+        run: |
+          for sh in bash zsh fish; do bin/c0fmt --completions $sh | grep -q c0fmt; done
+          bin/c0fmt __complete 1 c0fmt "" | grep -qx pretty
+          bin/c0fmt __complete 2 c0fmt export "" | grep -qx yaml
+          bin/c0fmt __complete 2 c0fmt pretty "REA" | grep -qx README.md
+          bin/c0fmt __complete 2 c0fmt import "s" | grep -qx src/

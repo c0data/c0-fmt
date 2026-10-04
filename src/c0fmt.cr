@@ -1,4 +1,3 @@
-# TODO: Add shell completion generation (Jargon supports bash/zsh/fish via --completions)
 require "jargon"
 require "c0"
 require "c0/csv"
@@ -89,6 +88,23 @@ YAML
 
 cli = Jargon.cli("c0fmt", yaml: SCHEMA)
 
+# Shell completion. Jargon generates the scripts (`c0fmt --completions
+# bash|zsh|fish`) and completes subcommands, flags, and enum values on its
+# own; those scripts turn off the shell's native filename completion, so
+# path-valued arguments are completed here.
+FORMATS = %w[csv json yaml]
+
+{"import.file", "import.output", "export.file", "export.output",
+ "pretty.file", "pretty.output", "compact.file", "compact.output",
+ "validate.file"}.each do |field|
+  cli.completer(field) { |ctx| path_candidates(ctx.partial) }
+end
+
+# The first positional of `import` is a format or, when omitted, the file.
+cli.completer("import.format") do |ctx|
+  FORMATS.select(&.starts_with?(ctx.partial)) + path_candidates(ctx.partial)
+end
+
 cli.run do |result|
   input_file = result["file"]?.try(&.as_s)
   output_file = result["output"]?.try(&.as_s)
@@ -178,6 +194,26 @@ cli.run do |result|
       print res
     end
   end
+end
+
+# Filesystem entries matching a partially typed path, directories with a
+# trailing slash. Dotfiles are offered only once a dot has been typed.
+def path_candidates(partial : String) : Array(String)
+  dir, prefix = if i = partial.rindex('/')
+                  {partial[0..i], partial[(i + 1)..]}
+                else
+                  {"", partial}
+                end
+  lookup = dir.empty? ? "." : dir
+  lookup = Path[lookup].expand(home: true).to_s if lookup.starts_with?('~')
+  return [] of String unless Dir.exists?(lookup)
+
+  Dir.children(lookup)
+    .select { |name| name.starts_with?(prefix) && (prefix.starts_with?('.') || !name.starts_with?('.')) }
+    .sort!
+    .map { |name| File.directory?(File.join(lookup, name)) ? "#{dir}#{name}/" : "#{dir}#{name}" }
+rescue File::Error
+  [] of String
 end
 
 # Detect if input contains Unicode Control Pictures (pretty format)

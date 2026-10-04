@@ -35,6 +35,22 @@ shards build --release
 cp bin/c0fmt ~/.local/bin/    # or anywhere on your PATH
 ```
 
+## Shell completion
+
+c0fmt generates its own completion scripts for bash, zsh, and fish. They
+complete subcommands, options, formats, and file paths.
+
+```sh
+# bash
+c0fmt --completions bash > ~/.local/share/bash-completion/completions/c0fmt
+
+# zsh (a directory on your $fpath)
+c0fmt --completions zsh > ~/.zfunc/_c0fmt
+
+# fish
+c0fmt --completions fish > ~/.config/fish/completions/c0fmt.fish
+```
+
 ## Examples
 
 Convert a CSV file to pretty-printed C0DATA:
