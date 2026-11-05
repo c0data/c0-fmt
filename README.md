@@ -63,6 +63,9 @@ c0fmt --completions fish > ~/.config/fish/completions/c0fmt.fish
 of the format: a SYN heading, a file name, groups at two depths, a header
 row, nested lists, a keyed record with a multi-line text value, a note, a
 dead record, and references. `cat` it to see the glyphs.
+`examples/inventory-compact.c0` is the same document in compact form,
+the bytes on the wire; `cat -v` shows the codes as `^A`, `^^` and so
+on, and `c0fmt pretty` turns it back into the first file.
 
 Convert a CSV file to pretty-printed C0DATA:
 
