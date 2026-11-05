@@ -74,11 +74,16 @@ c0fmt import data.csv | c0fmt pretty
 ```
 
 ```
+␖␁version␟1
 ␝data
   ␁␞name␟amount
   ␞Alice␟100
   ␞Bob␟200
+␄
 ```
+
+Import writes a complete file: the SYN heading naming the spec version,
+the data, EOT.
 
 Round-trip through C0DATA and back to CSV:
 
@@ -93,10 +98,12 @@ echo '{"users": [{"name": "Alice"}, {"name": "Bob"}]}' | c0fmt import | c0fmt pr
 ```
 
 ```
+␖␁version␟1
 ␝users
   ␁␞name
   ␞Alice
   ␞Bob
+␄
 ```
 
 Export to JSON or YAML. A header row gives objects; a keyed record gives

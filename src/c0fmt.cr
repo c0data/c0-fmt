@@ -152,7 +152,8 @@ def run(result) : Nil
                   STDERR.puts "Cannot detect input format. Specify: c0fmt import <csv|json|yaml> [file]"
                   exit 1
                 end
-          String.new(buf)
+          # The output is a file: a writer emits the SYN heading and EOT.
+          as_file(buf)
         when "export"
           format = result["format"].as_s
           buf = to_compact(input)
@@ -184,6 +185,20 @@ def run(result) : Nil
       print res
     end
   end
+end
+
+# Wrap a body in the file framing: SYN, a heading naming the spec version,
+# the body, EOT.
+def as_file(body : Bytes) : String
+  io = IO::Memory.new
+  io.write_byte(C0::SYN)
+  io.write_byte(C0::SOH)
+  io << "version"
+  io.write_byte(C0::US)
+  io << "1"
+  io.write(body)
+  io.write_byte(C0::EOT)
+  io.to_s
 end
 
 # The input file, or stdin when none is given.
