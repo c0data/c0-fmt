@@ -17,12 +17,18 @@ Commands:
 
 Options:
   -o, --output FILE    Write to file (default: stdout)
-  -g, --group NAME     Group name for import (default: filename stem)
+  -g, --group NAME     import: group name (default: filename stem)
+                       export csv: which group (default: the first)
+  -a, --align          pretty: align table columns
+  -s, --stream         validate: as a stream log (torn tail, damaged blocks)
+  -c, --canonical      validate: also require canonical form
   -h, --help           Show help
 ```
 
-Reads from a file argument or stdin. The import command auto-detects
-format from file extension (.csv, .json, .yaml, .yml) or content.
+Reads from a file argument or stdin. Every command accepts either form of
+C0DATA as input, compact or pretty, and tells them apart by the glyphs.
+The import command auto-detects its format from the file extension
+(.csv, .json, .yaml, .yml) or the content.
 
 ## Install
 
@@ -53,6 +59,11 @@ c0fmt --completions fish > ~/.config/fish/completions/c0fmt.fish
 
 ## Examples
 
+`examples/inventory.c0` is a small document in pretty form that uses most
+of the format: a SYN heading, a file name, groups at two depths, a header
+row, nested lists, a keyed record with a multi-line text value, a note, a
+dead record, and references. `cat` it to see the glyphs.
+
 Convert a CSV file to pretty-printed C0DATA:
 
 ```sh
@@ -61,7 +72,7 @@ c0fmt import data.csv | c0fmt pretty
 
 ```
 ␝data
-  ␁name␟amount
+  ␁␞name␟amount
   ␞Alice␟100
   ␞Bob␟200
 ```
@@ -80,51 +91,62 @@ echo '{"users": [{"name": "Alice"}, {"name": "Bob"}]}' | c0fmt import | c0fmt pr
 
 ```
 ␝users
-  ␁name
+  ␁␞name
   ␞Alice
   ␞Bob
 ```
 
-Export to JSON or YAML:
+Export to JSON or YAML. A header row gives objects; a keyed record gives
+an object; a nested level gives a list or table; a reference gives
+`{"$ref": "group/record"}`:
 
 ```sh
-c0fmt import users.csv | c0fmt export json
+c0fmt export json examples/inventory.c0
 ```
 
 ```json
 {
-  "users": [
-    {"name": "Alice", "amount": "100"},
-    {"name": "Bob", "amount": "200"}
-  ]
+  "inventory": {
+    "users": [
+      {"id": "1", "name": "Alice", "email": "alice@example.com", "roles": ["admin", "editor"]},
+      ...
+    ],
+    "config": {"host": "localhost", "port": "5432", "motd": "Welcome back.\nSecond line."},
+    "links": [{"user": {"$ref": "users/1"}, "tag": {"$ref": "tags/001"}}]
+  }
 }
 ```
 
+CSV takes one group, the first unless `-g` names another. A reference is
+written as its path; a nested level has no CSV form and is an error:
+
 ```sh
-c0fmt import users.csv | c0fmt export yaml
+c0fmt export csv -g links examples/inventory.c0
 ```
 
-```yaml
----
-users:
-- name: Alice
-  amount: "100"
-- name: Bob
-  amount: "200"
+```
+user,tag
+users/1,tags/001
 ```
 
-Validate a C0DATA file (`-s` validates a stream log block by block):
+Validate. The verdict goes to stderr; the exit status is 0 when valid.
+Reader warnings (a missing SYN heading, an unknown heading key) are
+printed but do not fail the check. `-c` also requires canonical form and
+says what is not canonical; `-s` reads a stream log block by block:
 
 ```sh
 c0fmt validate data.c0
-c0fmt validate -s claims.c0
+c0fmt validate -c data.c0       # not canonical: comment
+c0fmt validate -s claims.c0     # torn: 4 uncommitted byte(s) after 2 committed block(s)
 ```
 
-Convert between pretty and compact forms:
+Convert between pretty and compact forms; `-a` aligns table columns in
+the pretty output, which is layout only and never changes the data:
 
 ```sh
 c0fmt compact pretty.c0 -o data.c0    # pretty → compact
 c0fmt pretty data.c0                   # compact → pretty
+c0fmt pretty -a data.c0                # aligned
 ```
 
 ## Development

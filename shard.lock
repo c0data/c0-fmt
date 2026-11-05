@@ -2,7 +2,7 @@ version: 2.0
 shards:
   c0:
     git: https://github.com/c0data/c0-cr.git
-    version: 0.11.0
+    version: 1.0.0-dev+git.commit.38a6661f655e066c0fb97a6f4b5bc92644607443
 
   jargon:
     git: https://github.com/openbohemians/jargon.cr.git

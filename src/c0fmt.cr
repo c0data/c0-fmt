@@ -45,6 +45,10 @@ properties:
     type: string
     short: o
     description: Output file (stdout if omitted)
+  group:
+    type: string
+    short: g
+    description: Group to export (csv only; default the first group)
 ---
 name: pretty
 description: Convert C0DATA to pretty-printed Unicode form
@@ -58,6 +62,10 @@ properties:
     type: string
     short: o
     description: Output file (stdout if omitted)
+  align:
+    type: boolean
+    short: a
+    description: Align table columns (layout only; never changes the data)
 ---
 name: compact
 description: Convert C0DATA to compact binary form
@@ -83,7 +91,11 @@ properties:
   stream:
     type: boolean
     short: s
-    description: Validate as a stream-mode log (report torn tail)
+    description: Validate as a stream-mode log (report torn tail and damaged blocks)
+  canonical:
+    type: boolean
+    short: c
+    description: Also require canonical form (no layout, one spelling per value, unique keys)
 YAML
 
 cli = Jargon.cli("c0fmt", yaml: SCHEMA)
@@ -106,15 +118,18 @@ cli.completer("import.format") do |ctx|
 end
 
 cli.run do |result|
+  run(result)
+rescue ex : C0::Error
+  STDERR.puts "c0fmt: #{ex.message}"
+  exit 1
+end
+
+def run(result) : Nil
   input_file = result["file"]?.try(&.as_s)
   output_file = result["output"]?.try(&.as_s)
 
   # Read input from file or stdin
-  input = if file = input_file
-             File.read(file)
-           else
-             STDIN.gets_to_end
-           end
+  input = read_input(input_file)
 
   res = case result.subcommand
         when "import"
@@ -123,7 +138,7 @@ cli.run do |result|
           if raw_format && !{"csv", "json", "yaml"}.includes?(raw_format)
             # It's actually a file path, not a format
             input_file = raw_format
-            input = File.read(input_file)
+            input = read_input(input_file)
             raw_format = nil
           end
           format = raw_format || detect_format(input_file, input)
@@ -138,52 +153,27 @@ cli.run do |result|
                   exit 1
                 end
           String.new(buf)
-
         when "export"
           format = result["format"].as_s
           buf = to_compact(input)
 
           case format
-          when "csv"  then C0::CSV.to_csv(buf)
+          when "csv"  then C0::CSV.to_csv(buf, result["group"]?.try(&.as_s))
           when "json" then C0::JSON.to_json(buf)
           when "yaml" then C0::JSON.to_yaml(buf)
-          else raise "unreachable"
+          else             raise "unreachable"
           end
-
         when "pretty"
           buf = to_compact(input)
-          C0::Pretty.format(buf)
-
+          pretty = C0::Pretty.format(buf)
+          result["align"]?.try(&.as_bool) ? C0::Pretty.align(pretty) : pretty
         when "compact"
           buf = to_compact(input)
           String.new(buf)
-
         when "validate"
           buf = to_compact(input)
-          if result["stream"]?.try(&.as_bool)
-            reader = C0::Stream::Reader.new(buf)
-            begin
-              C0::Tokenizer.new(reader.committed).each { }
-            rescue ex : C0::Error
-              STDERR.puts "invalid: #{ex.message}"
-              exit 1
-            end
-            if reader.torn?
-              STDERR.puts "torn: #{reader.tail.size} uncommitted byte(s) after " \
-                          "#{reader.block_count} committed block(s)"
-              exit 1
-            end
-            STDERR.puts "valid: #{reader.block_count} committed block(s)"
-            exit 0
-          end
-          begin
-            C0::Tokenizer.new(buf).each { }
-            STDERR.puts "valid"
-            exit 0
-          rescue ex : C0::Error
-            STDERR.puts "invalid: #{ex.message}"
-            exit 1
-          end
+          exit validate(buf, stream: result["stream"]?.try(&.as_bool) || false,
+            canonical: result["canonical"]?.try(&.as_bool) || false)
         end
 
   # Write output
@@ -194,6 +184,70 @@ cli.run do |result|
       print res
     end
   end
+end
+
+# The input file, or stdin when none is given.
+def read_input(file : String?) : String
+  file ? File.read(file) : STDIN.gets_to_end
+rescue ex : File::Error
+  STDERR.puts "c0fmt: #{ex.message}"
+  exit 2
+end
+
+# Check structure (and canonical form on request), print a verdict to
+# stderr, return the exit status. A stream log is checked block by block:
+# the committed part must be well-formed, damaged blocks and an uncommitted
+# tail are reported.
+def validate(buf : Bytes, stream : Bool, canonical : Bool) : Int32
+  if stream
+    reader = C0::Stream::Reader.new(buf)
+    begin
+      C0.validate(reader.committed)
+    rescue ex : C0::Error
+      STDERR.puts "invalid: #{ex.message}"
+      return 1
+    end
+    status = 0
+    unless reader.damaged.empty?
+      STDERR.puts "damaged: block(s) #{reader.damaged.join(", ")} of #{reader.block_count}"
+      status = 1
+    end
+    if reader.torn?
+      STDERR.puts "torn: #{reader.tail.size} uncommitted byte(s) after " \
+                  "#{reader.block_count} committed block(s)"
+      status = 1
+    end
+    STDERR.puts "valid: #{reader.block_count} committed block(s)" if status == 0
+    return status
+  end
+
+  begin
+    C0.validate(buf)
+  rescue ex : C0::Error
+    STDERR.puts "invalid: #{ex.message}"
+    return 1
+  end
+  C0::Container.new(buf).documents.each do |doc|
+    doc.warnings.each { |w| STDERR.puts "warning: #{w}" }
+  end
+  if canonical
+    # A canonical file is SYN, a heading with unique keys, a canonical
+    # body, EOT: the markers and heading are outside the unit.
+    why = [] of String
+    C0::Container.new(buf).documents.each do |doc|
+      keys = doc.heading.keys
+      why << "duplicate heading key" if keys.size != keys.uniq.size
+      v = C0::Validator.new(doc.body.raw, canonical: true)
+      v.run
+      why.concat(v.warnings)
+    end
+    unless why.empty?
+      why.uniq.each { |w| STDERR.puts "not canonical: #{w}" }
+      return 1
+    end
+  end
+  STDERR.puts(canonical ? "valid, canonical" : "valid")
+  0
 end
 
 # Filesystem entries matching a partially typed path, directories with a
@@ -238,9 +292,9 @@ def detect_format(file : String?, content : String) : String?
   # Try file extension first
   if f = file
     case File.extname(f).downcase
-    when ".csv"           then return "csv"
-    when ".json"          then return "json"
-    when ".yaml", ".yml"  then return "yaml"
+    when ".csv"          then return "csv"
+    when ".json"         then return "json"
+    when ".yaml", ".yml" then return "yaml"
     end
   end
 
