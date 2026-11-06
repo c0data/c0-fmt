@@ -1,5 +1,5 @@
 name: c0-fmt
-version: 0.2.0
+version: 0.12.0
 description: c0fmt — command-line tool for C0DATA (import/export CSV, JSON, YAML; pretty and compact forms; validation)
 
 authors:
